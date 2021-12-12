@@ -2,11 +2,15 @@ import pyverilog.vparser.ast as vast
 from pyverilog.vparser.parser import parse
 from pyverilog.ast_code_generator.codegen import ASTCodeGenerator
 from pprint import pprint as pp
+import argparse
 
-rtl = "test2.v"
+argparser = argparse.ArgumentParser(description='Automatic Clock Gate Generator for Verilog')
+argparser.add_argument('filepath')
+line_args = argparser.parse_args()
+rtl = line_args.filepath
 ast,_ = parse([rtl])
-ast.show()
-print("_______________________________________________-")
+
+# print("_______________________________________________-")
 # get the root node of the tree (Description)
 desc = ast.description
 # get the ModuleDef node
@@ -43,6 +47,11 @@ registers = {
         "CLK" : "CLK",
         "D" : "D",
         "Q": "Q",
+    },
+    "sky130_fd_sc_hd__dfrtp_1":{
+        "CLK" : "CLK",
+        "D" : "D",
+        "Q": "Q",
     }
 
 }
@@ -70,7 +79,7 @@ inv = {
 
 }
 
-chain = [
+gatemux = [
     {
             "sky130_fd_sc_hd__a21oi_1" :{
             "A": "A1",
@@ -99,6 +108,7 @@ generated_gclks ={
 }
 
 def getGCLK(s):
+    # print("CALLED getCLK")
     if s not in generated_gclks:
         global gclk_instances
         wire_name = gclk_output+"_"+str(gclk_instances)+"_"
@@ -118,13 +128,28 @@ def getGCLK(s):
                 )
         gclk_instances+=1
         items.append(gate_wire)
-        items.append(vast.InstanceList(clock_gate["module"],tuple(),tuple([gate_instance]))) 
-        generated_gclks[s] = wire_name
+        generated_gclks[s] = {
+            "count" : 1,
+            "wire" : wire_name,
+            "instance" : gate_instance
+        }
     else:
-        wire_name = generated_gclks[s]
+        wire_name = generated_gclks[s]["wire"]
+        generated_gclks[s]["count"]+=1
     return wire_name
 
-def getInstanceLists():
+def appendGCLKs():
+    for gclk in generated_gclks:                    # checks the number of loads connected to the clockgate and sizes it accordingly
+        if generated_gclks[gclk]["count"]<=8:
+            generated_gclks[gclk]["instance"].module = clock_gate["module"]+"_1"
+        elif generated_gclks[gclk]["count"]<=16:
+            generated_gclks[gclk]["instance"].module = clock_gate["module"]+"_2"
+        else:
+            generated_gclks[gclk]["instance"].module = clock_gate["module"]+"_4"
+        items.append(vast.InstanceList(generated_gclks[gclk]["instance"].module,tuple(),tuple([generated_gclks[gclk]["instance"]])))
+
+
+def getInstanceLists():                         # gets all instantiated modules from the verilog file
     instances =[] 
     items = []
     for defitem in definition.items:
@@ -136,21 +161,21 @@ def getInstanceLists():
 
 instances, items = getInstanceLists();
 
-for list in instances:
+for list in instances:                              # searches for all registers in the file
     if list.module in registers:
         reg = registers[list.module]
         instance  = list.instances[0]
         output_port = ""
         for port in instance.portlist:
-            print(port.portname, port.argname)
+            # print(port.portname, port.argname)
             if port.portname == reg["Q"]:
                 output_port = port.argname
                 found_regs[output_port] = list 
 
-pp(found_regs)
-for list in instances:
+# pp(found_regs)
+for list in instances:                          # checks if a multiplexer's input is fed back to a multiplexer and adds a clockgate accordingly
     if list.module in muxs:
-        print(list.module)
+        # print(list.module)
         mux = muxs[list.module]
         instance  = list.instances[0]
         a = None
@@ -190,10 +215,10 @@ for list in instances:
 
 
 for list in instances:
-    if list.module in chain[0]:         # look for a21oi
-        pp(list.instances)
+    if list.module in gatemux[0]:         # look for a21oi
+        # pp(list.instances)
         instance = list.instances[0]
-        mod = chain[0][list.module]
+        mod = gatemux[0][list.module]
         c = a = y = b = None
         for port in instance.portlist:
             if port.portname == mod["C"]:
@@ -207,9 +232,9 @@ for list in instances:
 
 
         for list2 in instances:             # check if a NOR gate is connected to one of a20i's inputs
-                if list2.module in chain[1]:
+                if list2.module in gatemux[1]:
                     instance2 = list2.instances[0]
-                    mod2 = chain[1][list2.module]
+                    mod2 = gatemux[1][list2.module]
                     y2 = a2 =b2 = None
                     for port in instance2.portlist:         
                         if port.portname == mod2["A"]:
@@ -254,17 +279,19 @@ for list in instances:
 
                             
 
+appendGCLKs()    # adds clockgates to the rtl   
+
 for reg in found_regs.values():
     items.append(reg)
 
 
-pp(items)
+# pp(items)
 
 definition.items = tuple(items)
 # ast.show()
 codegen = ASTCodeGenerator()
 rslt = codegen.visit(ast)
-f = open(rtl+"hello", "w+")
+f = open(rtl[:-2]+".clockgate.v", "w+")
 f.write(rslt)
 f.close()
 
