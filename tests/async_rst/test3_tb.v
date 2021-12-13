@@ -7,7 +7,7 @@ module test3_tb;
 
 
 reg [3:0] D;
-reg en, clk;
+reg rstn, en, clk;
 wire [3:0]q;
 
 test3 uut(
