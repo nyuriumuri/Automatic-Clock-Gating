@@ -5,10 +5,10 @@
 
 ## How To Run:
 ```
-python3 project3.py gatelist.v
+python3 project3.py <netlist>
 ```
 
-For instance, to create a clock-gates netlist for the provided 32bit register test case:
+For instance, to create a clock-gated netlist for the provided 32bit register test case:
 ```
  python3 project3.py tests/32bits/test_32bit.gl.v
  ```
