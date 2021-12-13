@@ -107,7 +107,7 @@ generated_gclks ={
 
 }
 
-def getGCLK(s):
+def getGCLK(s):                                                 # gets the clockgate associated with a specific select line
     # print("CALLED getCLK")
     if s not in generated_gclks:
         global gclk_instances
